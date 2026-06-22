@@ -1,0 +1,12 @@
+Source: lader
+Section: utils
+Priority: optional
+Maintainer: JanisRUS <janisrus35@gmail.com>
+Standards-Version: 4.6.0
+Build-Depends: debhelper-compat (= 13)
+
+Package: lader
+Architecture: any
+Section: utils
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: A utility for parsing logical analyzer data

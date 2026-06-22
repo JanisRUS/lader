@@ -1,0 +1,7 @@
+build
+output
+doc/html
+.vscode
+*.user
+.cache
+debian/*.links
