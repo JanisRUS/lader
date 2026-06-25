@@ -134,14 +134,18 @@ int main(int argc, char *argv[])
     // Проверка входного файла
     //
 
-    if (fileIndex == -1 || argc - fileIndex != 1)
+    /// TODO Вернуть
+    /*if (fileIndex == -1 || argc - fileIndex != 1)
     {
         printHelp();
         isOk = false;
         goto cleanup;
     }
 
-    fileInput = argv[fileIndex];
+    fileInput = argv[fileIndex];*/
+    ///TODO убрать
+    char test[] = "DATA.bin";
+    fileInput = &test[0];
 
     if (access(fileInput, R_OK) != 0)
     {
