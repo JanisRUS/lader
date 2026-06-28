@@ -8,7 +8,6 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include "lader.h"
-#include <arpa/inet.h>
 
 //
 // Объявления констант
@@ -18,7 +17,7 @@
 static const uint32_t LADER_SYNC_MARK = 0b00011010110011111111110000011101;
 
 /// @brief      Размер синхромаркера (бит)
-static const long LADER_SYNC_MARK_SIZE = 32;
+static const size_t LADER_SYNC_MARK_SIZE = 32;
 
 //
 // Объявления типов данных
@@ -42,7 +41,7 @@ typedef enum LaderInputFileByteMasksEnum
 }LaderInputFileByteMasksEnum;
 
 //
-// Объявления внутренних функций
+// Объявления функций для считывания данных входного файла во временный
 //
 
 /// @brief      Функция парсинга входного файла во временный
@@ -55,8 +54,8 @@ typedef enum LaderInputFileByteMasksEnum
 /// @note       Биты между соседними синхроимпульсами не проверяются на соответствие. 
 ///                 Т.е. если между соседними синхроимпульсами данные имеют вид 1 1 0 1 1, 
 ///                 во временный файл будет записан 0
-/// @param[in]  inputFilePtr Указатель на входной файл
-/// @param[in]  tempFilePtr  Указатель на временный файл
+/// @param[in]  inputFilePtr Указатель на открытый входной файл
+/// @param[in]  tempFilePtr  Указатель на открытый временный файл
 /// @return     Возвращает 0 в случае успешного выполнения операции.
 ///                 В противном случае, возвращает код ошибки
 static int laderInputFileParseToTemp(FILE *inputFilePtr, FILE *tempFilePtr);
@@ -77,15 +76,21 @@ static LaderInputFileByteTypesEnum laderInputFileDefineByteType(unsigned char by
 ///                 В противном случае, возвращает код ошибки
 static long laderInputFileFindNextByteTypeOf(FILE *inputFilePtr, LaderInputFileByteTypesEnum targetByteType);
 
-/// @brief      Функция поиска бита данных между синхроимпульсами
-/// @details    Данная функция выполняет поиск центрального бита данных в диапазоне курсора inputFilePtr [start:stop]
+/// @brief      Функция записи бита данных между синхромаркерами из входного файла во временный
+/// @details    Данная функция выполняет поиск центрального бита данных в диапазоне курсора inputFilePtr [start:stop] 
+///                 и пишет его в tempFilePtr
 /// @note       После успешного выполнения, функция переводит курсор inputFilePtr на stop
 /// @param[in]  inputFilePtr Указатель на открытый входной файл
-/// @param[in]  start        Позиция курсора inputFilePtr с первым байтом данных после сихроимпульса
-/// @param[in]  stop         Позиция курсора inputFilePtr с последним байтом данных перед синхроимпульсом
-/// @return     Возвращает бит данных, находящийся между синхроимпульсами.
+/// @param[in]  tempFilePtr  Указатель на открытый временный файл
+/// @param[in]  start        Позиция курсора inputFilePtr с первым битом данных после синхроимпульса
+/// @param[in]  stop         Позиция курсора inputFilePtr с последним битом данных перед синхроимпульсом
+/// @return     Возвращает 0 в случае успешного выполнения операци.
 ///                 В противном случае, возвращает код ошибки
-static int laderInputFileFindDataBit(FILE *inputFilePtr, long start, long stop);
+static int laderInputFileReadBitToTemp(FILE *inputFilePtr, FILE *tempFilePtr, long start, long stop);
+
+//
+// Объявления функций для считывания данных временного файла в выходной
+//
 
 /// @brief      Функция создания временного файла
 /// @details    Данная функция выполняет создание временного файла, используя
@@ -110,33 +115,33 @@ static void laderTempFileDestroy(char *fileNamePtr, FILE **filePtrPtr);
 /// @details    Данная функция выполняет: <br>
 ///                 1) Поиск первого синхромаркера <br>
 ///                 2) Циклический поиск диапазона курсора tempFilePtr между соседними синхромаркерами <br>
-///                 3) Запись всех бит, находящихся между соседними синхроимпульсами, в outputFilePtr
+///                 3) Запись всех бит, находящихся между соседними синхромаркерами, в outputFilePtr
 /// @note       Данные до первого и после последнего синхромакера считаются невалидными
-/// @param[in]  tempFilePtr   Указатель на временный файл
-/// @param[in]  outputFilePtr Указатель на выходной файл
-/// @return     Возвращает 0 в случае успешного выполнения операции.
+/// @param[in]  tempFilePtr   Указатель на открытый временный файл
+/// @param[in]  outputFilePtr Указатель на открытый выходной файл
+/// @return     Возвращает длину пакета в битах, измеренную от начала синхромаркера до начала следующего синхромаркера
+///                 в случае успешного выполнения операции.
 ///                 В противном случае, возвращает код ошибки
 static int laderTempFileParseToOutput(FILE *tempFilePtr, FILE *outputFilePtr);
 
 /// @brief      Функция поиска следующего синхромаркера во временном файле
 /// @details    Данная функция выполняет перемещение курсора tempFilePtr на 
-///                 следующий синхромаркер временного файла
+///                 первый бит данных после следующего синхромаркера временного файла
 /// @param[in]  tempFilePtr Указатель на открытый входной файл
-/// @return     Возвращает позицию курсора сонхромаркера в случае успешного выполнения операции.
+/// @return     Возвращает позицию курсора следующего синхромаркера в случае успешного выполнения операции.
 ///                 В противном случае, возвращает код ошибки
 static long laderTempFileFindNextSync(FILE *tempFilePtr);
 
 /// @brief      Функция записи данных между синхромаркерами из временного файла в выходной
 /// @details    Данная функция выполняет сборку всех байт в диапазоне курсора tempFilePtr [start:stop] 
 ///                 и пишет их в outputFilePtr
-/// @note       После успешного выполнения, функция переводит курсор tempFilePtr на stop
 /// @note       Если последний собираемый байт данных окажется неполным, его младшие биты будут заполнены нулями.
 ///                 Например, в диапазоне [start:stop] есть только 3 бита данных для сборки последнего байта и они равны 0b101.
 ///                 Таким образом, последний байт будет равен 0b10100000
-/// @param[in]  tempFilePtr   Указатель на временный файл
-/// @param[in]  outputFilePtr Указатель на выходной файл
-/// @param[in]  start         Позиция курсора tempFilePtr с первым битом данных после сихромаркера
-/// @param[in]  stop          Позиция курсора tempFilePtr с последним битом данных перед синхромаркера
+/// @param[in]  tempFilePtr   Указатель на открытый временный файл
+/// @param[in]  outputFilePtr Указатель на открытый выходной файл
+/// @param[in]  start         Позиция курсора tempFilePtr с первым битом сихромаркера
+/// @param[in]  stop          Позиция курсора tempFilePtr с последним битом данных после синхромаркера
 /// @return     Возвращает 0 в случае успешного выполнения операци.
 ///                 В противном случае, возвращает код ошибки
 static int laderTempFileReadDataToOutput(FILE *tempFilePtr, FILE *outputFilePtr, long start, long stop);
@@ -150,26 +155,56 @@ int lader(const char *inputFileNamePtr, const char *outputFileNamePtr)
     int  answer         = 0;
     char tempFileName[] = ".temp_XXXXXX";
 
-    FILE *inputFilePtr = fopen(inputFileNamePtr, "r");
-    FILE *tempFilePtr  = laderTempFileCreate(&tempFileName[0]);
+    if (!inputFileNamePtr)
+    {
+        answer = LaderErrorCodeArg;
+        goto cleanup;
+    }
+
+    if (!outputFileNamePtr)
+    {
+        answer = LaderErrorCodeArg;
+        goto cleanup;
+    }
+
+    FILE *inputFilePtr  = fopen(inputFileNamePtr, "r");
+    FILE *tempFilePtr   = laderTempFileCreate(&tempFileName[0]);
+    FILE *outputFilePtr = fopen(outputFileNamePtr, "wb");
 
     if (!inputFilePtr)
     {
-        answer = -1;
+        answer = LaderErrorCodeInputFileOpen;
         goto cleanup;
     }
 
     if (!tempFilePtr)
     {
-        answer = -2;
+        answer = LaderErrorCodeTempFileOpen;
         goto cleanup;
     }
 
-    laderInputFileParseToTemp(inputFilePtr, tempFilePtr);
-    fclose(inputFilePtr);
-    inputFilePtr = 0;
+    if (!outputFilePtr)
+    {
+        answer = LaderErrorCodeOutputFileOpen;
+        goto cleanup;
+    }
 
-    rewind(tempFilePtr);
+    if (laderInputFileParseToTemp(inputFilePtr, tempFilePtr) != 0)
+    {
+        answer = LaderErrorCodeInputFileParse;
+        goto cleanup;
+    }
+
+    answer = laderTempFileParseToOutput(tempFilePtr, outputFilePtr);
+    if (answer == LaderErrorCodeLengthInvalid)
+    {
+        goto cleanup;
+    }
+    else if (answer < 0)
+    {
+        answer = LaderErrorCodeTempFileParse;
+        goto cleanup;
+    }
 
 cleanup:
 {
@@ -180,29 +215,36 @@ cleanup:
     }
 
     laderTempFileDestroy(&tempFileName[0], &tempFilePtr);
+
+    if (outputFilePtr)
+    {
+        fclose(outputFilePtr);
+        outputFilePtr = 0;
+    }
 }
+
     return answer;
 }
 
 //
-// Внутренние функции
+// Функции для считывания данных входного файла во временный
 //
 
 int laderInputFileParseToTemp(FILE *inputFilePtr, FILE *tempFilePtr)
 {
     if (!inputFilePtr)
     {
-        return -1;
+        return LaderErrorCodeArg;
     }
 
     if (!tempFilePtr)
     {
-        return -2;
+        return LaderErrorCodeArg;
     }
     
     if (laderInputFileFindNextByteTypeOf(inputFilePtr, LaderInputFileByteTypeSync) < 0)
     {
-        return -3;
+        return LaderErrorCodeRead;
     }
 
     long dataStart = 0;
@@ -218,10 +260,9 @@ int laderInputFileParseToTemp(FILE *inputFilePtr, FILE *tempFilePtr)
             continue;
         }
 
-        bit = laderInputFileFindDataBit(inputFilePtr, dataStart, dataStop);
-        if (bit >= 0)
+        if (laderInputFileReadBitToTemp(inputFilePtr, tempFilePtr, dataStart, dataStop) != 0)
         {
-            fwrite((uint8_t *)&bit, 1, 1, tempFilePtr);
+            return LaderErrorCodeInternal;
         }
     }
 
@@ -249,12 +290,12 @@ long laderInputFileFindNextByteTypeOf(FILE *inputFilePtr, LaderInputFileByteType
 {
     if (!inputFilePtr)
     {
-        return -1;
+        return LaderErrorCodeArg;
     }
 
     if (targetByteType >= LaderInputFileByteTypesCount)
     {
-        return -2;
+        return LaderErrorCodeArg;
     }
 
     int byte = 0;
@@ -270,24 +311,24 @@ long laderInputFileFindNextByteTypeOf(FILE *inputFilePtr, LaderInputFileByteType
         }
     }
 
-    return -3;
+    return LaderErrorCodeRead;
 }
 
-int laderInputFileFindDataBit(FILE *inputFilePtr, long start, long stop)
+int laderInputFileReadBitToTemp(FILE *inputFilePtr, FILE *tempFilePtr, long start, long stop)
 {
     if (!inputFilePtr)
     {
-        return -1;
+        return LaderErrorCodeArg;
     }
 
-    if (feof(inputFilePtr))
+    if (!tempFilePtr)
     {
-        return -2;
+        return LaderErrorCodeArg;
     }
 
     if (start > stop)
     {
-        return -3;
+        return LaderErrorCodeArg;
     }
 
     int byte = 0;
@@ -297,27 +338,32 @@ int laderInputFileFindDataBit(FILE *inputFilePtr, long start, long stop)
     ///                 Если не все байты равны, промежуток между синхроимпульсами можно считать поврежденным и
     ///                 возвращать код ошибки
 
-    fseek(inputFilePtr, start + (stop - stop) / 2, SEEK_SET);
+    fseek(inputFilePtr, start + (stop - start) / 2, SEEK_SET);
     byte = fgetc(inputFilePtr);
     
     if ((byte & (LaderInputFileByteMaskZero | LaderInputFileByteMaskOne)) == 0)
     {
-        return -4;
+        return LaderErrorCodeRead;
     }
 
-    if ((byte & LaderInputFileByteMaskZero) == LaderInputFileByteMaskZero)
-    {
-        bit = 0;
-    }
-    else if ((byte & LaderInputFileByteMaskOne) == LaderInputFileByteMaskOne)
+    if ((byte & LaderInputFileByteMaskOne) == LaderInputFileByteMaskOne)
     {
         bit = 1;
     }
 
+    if (fwrite((uint8_t *)&bit, 1, 1, tempFilePtr) != 1)
+    {
+        return LaderErrorCodeWrite;
+    }
+
     fseek(inputFilePtr, stop, SEEK_SET);
 
-    return bit;
+    return 0;
 }
+
+//
+// Функции для считывания данных временного файла в выходной
+//
 
 FILE *laderTempFileCreate(char *fileNameTemplatePtr)
 {
@@ -371,47 +417,110 @@ void laderTempFileDestroy(char *fileNamePtr, FILE **filePtrPtr)
     }
 }
 
-/// @brief      Функция парсинга временного файла в выходной
-/// @details    Данная функция выполняет: <br>
-///                 1) Поиск первого синхромаркера <br>
-///                 2) Циклический поиск диапазона курсора tempFilePtr между соседними синхромаркерами <br>
-///                 3) Запись всех бит, находящихся между соседними синхроимпульсами, в outputFilePtr
-/// @note       Данные до первого и после последнего синхромакера считаются невалидными
-/// @param[in]  tempFilePtr   Указатель на временный файл
-/// @param[in]  outputFilePtr Указатель на выходной файл
-/// @return     Возвращает 0 в случае успешного выполнения операции.
-///                 В противном случае, возвращает 0
 int laderTempFileParseToOutput(FILE *tempFilePtr, FILE *outputFilePtr)
 {
-    /// TODO
+    if (!tempFilePtr)
+    {
+        return LaderErrorCodeArg;
+    }
+
+    if (!outputFilePtr)
+    {
+        return LaderErrorCodeArg;
+    }
+
+    rewind(tempFilePtr);
+
+    long dataStart      = 0;
+    long dataStop       = 0;
+    long cursorPosition = 0;
+    int  dataLengthLast = -1;
+    if ((dataStop = laderTempFileFindNextSync(tempFilePtr)) < 0)
+    {
+        return LaderErrorCodeRead;
+    }
+    while (feof(tempFilePtr) == 0)
+    {
+        dataStart = dataStop;
+        dataStop  = laderTempFileFindNextSync(tempFilePtr);
+
+        if (dataStart < 0 || dataStop < 0)
+        {
+            continue;
+        }
+
+        if (dataLengthLast == -1)
+        {
+            dataLengthLast = dataStop - dataStart;
+        }
+
+        if (dataLengthLast != dataStop - dataStart)
+        {
+            dataLengthLast = -2;
+        }
+        else
+        {
+            dataLengthLast = dataStop - dataStart;
+        }
+        
+        cursorPosition = ftell(tempFilePtr);
+        if (laderTempFileReadDataToOutput(tempFilePtr, outputFilePtr, dataStart, dataStop) != 0)
+        {
+            return LaderErrorCodeInternal;
+        }
+        fseek(tempFilePtr, cursorPosition, SEEK_SET);
+    }
+
+    if (dataLengthLast < 0)
+    {
+        return LaderErrorCodeLengthInvalid;
+    }
+
+    return dataLengthLast;
 }
 
-/// @brief      Функция поиска следующего синхромаркера во временном файле
-/// @details    Данная функция выполняет перемещение курсора tempFilePtr на 
-///                 следующий синхромаркер временного файла
-/// @param[in]  tempFilePtr Указатель на открытый входной файл
-/// @return     Возвращает позицию курсора сонхромаркера в случае успешного выполнения операции.
-///                 В противном случае, возвращает код ошибки
 long laderTempFileFindNextSync(FILE *tempFilePtr)
 {
-    /// TODO
+    if (!tempFilePtr)
+    {
+        return LaderErrorCodeArg;
+    }
+
+    uint32_t syncMark = 0;
+    int      byte     = 0;
+    while ((byte = fgetc(tempFilePtr)) != EOF)
+    {
+        syncMark <<= 1;
+
+        if (byte)
+        {
+            syncMark |= 1;
+        }
+
+        if (syncMark == LADER_SYNC_MARK)
+        {
+            return ftell(tempFilePtr) - LADER_SYNC_MARK_SIZE;
+        }
+    }
+
+    return LaderErrorCodeRead;
 }
 
 int laderTempFileReadDataToOutput(FILE *tempFilePtr, FILE *outputFilePtr, long start, long stop)
 {
     if (!tempFilePtr)
     {
-        return -1;
+        return LaderErrorCodeArg;
     }
 
     if (!outputFilePtr)
     {
-        return -2;
+        return LaderErrorCodeArg;
     }
 
     if (start > stop)
     {
-        return -3;
+        return LaderErrorCodeArg;
     }
 
     fseek(tempFilePtr, start, SEEK_SET);
@@ -437,228 +546,21 @@ int laderTempFileReadDataToOutput(FILE *tempFilePtr, FILE *outputFilePtr, long s
 
         if (dataCounter % 8 == 0)
         {
-            fwrite(&dataByte, 1, 1, outputFilePtr);
+            if (fwrite(&dataByte, 1, 1, outputFilePtr) != 1)
+            {
+                return LaderErrorCodeWrite;
+            }
         }
     }
 
     if (dataRemains)
     {
         dataByte <<= (8 - dataRemains);
-        fwrite(&dataByte, 1, 1, outputFilePtr);
+        if (fwrite(&dataByte, 1, 1, outputFilePtr) != 1)
+        {
+            return LaderErrorCodeWrite;
+        }
     }
-
-    fseek(tempFilePtr, stop, SEEK_SET);
 
     return 0;
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-/*
-int lader(const char *inputFilePtr, const char *outputFilePtr)
-{
-    /// TODO разбить на функции
-    int  answer         = 0;
-    char tempFileName[] = ".temp_XXXXXX";
-
-    FILE *inputFile = fopen(inputFilePtr, "r");
-    FILE *tempFile  = laderTempFileCreate(&tempFileName[0]);
-
-    if (inputFile == 0)
-    {
-        answer = -1;
-        goto cleanup;
-    }
-
-    if (tempFile == 0)
-    {
-        answer = -2;
-        goto cleanup;
-    }
-    
-    {
-        bool isSyncFound = false;
-        int  byte        = 0;
-        while ((byte = fgetc(inputFile)) != EOF)
-        {
-            LaderInputFileByteTypesEnum dataType = laderInputFileDefineByteType(byte);
-
-            if (dataType == LaderInputFileByteTypeSync)
-            {
-                isSyncFound = true;
-            }
-            else
-            {
-                if (isSyncFound)
-                {
-                    fseek(inputFile, -1, SEEK_CUR);
-                    break;
-                }
-            }
-        }
-    }
-    
-    {
-        bool isSyncTarget = true;
-        long dataStart    = 0;
-        long dataStop     = 0;
-        int  byte         = 0;
-        while ((byte = fgetc(inputFile)) != EOF)
-        {
-            LaderInputFileByteTypesEnum dataType = laderInputFileDefineByteType(byte);
-
-            if (dataType == LaderInputFileByteTypeUnknown)
-            {
-                /// TODO Возможно, необходимо проиндицировать нахождение неизвестного типа данных
-                continue;
-            }
-
-            if (isSyncTarget)
-            {
-                if (dataType != LaderInputFileByteTypeSync)
-                {
-                    continue;
-                }
-
-                isSyncTarget = false;
-                dataStop     = ftell(inputFile);
-                fseek(inputFile, dataStart + (dataStop - dataStart) / 2, SEEK_SET);
-                byte = fgetc(inputFile);
-                
-                switch (laderInputFileDefineByteType(byte))
-                {
-                    case LaderInputFileByteMaskOne:
-                    {
-                        fprintf(tempFile, "1");
-                        break;
-                    }
-                    case LaderInputFileByteMaskZero:
-                    {
-                        fprintf(tempFile, "0");
-                        break;
-                    }
-                    default: break;
-                }
-
-                fseek(inputFile, dataStop, SEEK_SET);
-            }
-            else
-            {
-                if (dataType != LaderInputFileByteTypeOne &&
-                    dataType != LaderInputFileByteTypeZero)
-                {
-                    continue;
-                }
-
-                isSyncTarget = true;
-                dataStart    = ftell(inputFile) - 1;
-            }
-        }
-    }
-
-    fclose(inputFile);
-    inputFile = 0;
-
-    rewind(tempFile);
-    
-    {
-        uint32_t syncMark = 0;
-        int      byte     = 0;
-        while ((byte = fgetc(tempFile)) != EOF)
-        {
-            syncMark <<= 1;
-
-            if (byte == '1')
-            {
-                syncMark |= 1;
-            }
-            else
-            {
-                syncMark &= ~1;
-            }
-
-            if (syncMark == LADER_SYNC_MARK)
-            {
-                fseek(tempFile, -LADER_SYNC_MARK_SIZE, SEEK_CUR);
-                break;
-            }
-        }
-    }
-
-    FILE *outputFile = fopen(outputFilePtr, "wb");
-
-    if (!outputFile)
-    {
-        goto cleanup;
-    }
-
-    {
-        /// TODO Подумать, что делать, если последний пакет полный. Ведь он не запишется т.к. после него нет синхромаркера
-        uint32_t syncMark  = 0;
-        long     dataStart = ftell(tempFile);
-        long     dataStop  = 0;
-        int      byte      = 0;
-        int      count     = 0;
-        fseek(tempFile, LADER_SYNC_MARK_SIZE, SEEK_CUR);
-        while ((byte = fgetc(tempFile)) != EOF)
-        {
-            syncMark <<= 1;
-
-            if (byte == '1')
-            {
-                syncMark |= 1;
-            }
-            else
-            {
-                syncMark &= ~1;
-            }
-
-            if (syncMark == LADER_SYNC_MARK)
-            {
-                uint32_t syncMarkReversed = htonl(LADER_SYNC_MARK);
-
-                dataStop = ftell(tempFile) - LADER_SYNC_MARK_SIZE;
-
-                fseek(tempFile, dataStart + LADER_SYNC_MARK_SIZE, SEEK_SET);
-                fwrite(&syncMarkReversed, 1, LADER_SYNC_MARK_SIZE / 8, outputFile);
-
-                laderReadTempData(tempFile, outputFile, dataStop - dataStart);
-                printf("Length is %ld\n", dataStop - dataStart);
-
-                ++count;
-
-                dataStart = ftell(tempFile) - LADER_SYNC_MARK_SIZE;
-            }
-        }
-        printf("Count is %d\n", count);
-    }
-
-cleanup:
-{
-    if (inputFile)
-    {
-        fclose(inputFile);
-        inputFile = 0;
-    }
-
-    if (tempFile)
-    {
-        fclose(tempFile);
-        remove(tempFileName);
-        tempFile = 0;
-    }
-}
-    return answer;
-}
-*/
