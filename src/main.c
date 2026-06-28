@@ -192,11 +192,40 @@ int main(int argc, char *argv[])
     // Парсинг данных входного файла 
     //
 
-    if (lader(fileInput, fileOutput) != 0)
+    int packetSize = lader(fileInput, fileOutput);
+
+    if (packetSize < 0)
     {
+        switch ((LaderErrorCodesEnum)packetSize)
+        {
+            case LaderErrorCodeInputFileParse:
+            {
+                fprintf(stderr, "%s: input file parsing error\n", PROGRAMM_NAME);
+                break;
+            }
+            case LaderErrorCodeTempFileParse:
+            {
+                fprintf(stderr, "%s: temp file parsing error\n", PROGRAMM_NAME);
+                break;
+            }
+            case LaderErrorCodeLengthInvalid:
+            {
+                fprintf(stderr, "%s: the length of the output file data packages varies\n", PROGRAMM_NAME);
+                break;
+            }
+            default:
+            {
+                fprintf(stderr, "%s: internal error\n", PROGRAMM_NAME);
+                break;
+            }
+        }
         isOk = false;
         goto cleanup;
     }
+
+    printf("The parsed contents of the %s file were written to %s\n", fileInput, fileOutput);
+    printf("Calculated packet length in bits:\n");
+    printf("%d\n", packetSize);
 
 cleanup:
 {
