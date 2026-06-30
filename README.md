@@ -118,8 +118,23 @@ sudo apt remove "$(dpkg-parsechangelog -S Source)"*
 
 ```bash
 lader "logic-analyzer-data-file.bin"
+lader -o "outputFile.bin" "logic-analyzer-data-file.bin"
 ```
+
+# BUGS
+
+
 
 # TODO
 
-- Оформить документацию
+- Сделать скрипт для генерации пары входного и выходного файлов
+
+- Сделать правило make для создания тестовой среды
+
+- Сделать правило make для выполнения тестов
+
+- Протестировать утилиту
+
+- Исправить выявленные баги
+
+- Сделать релиз версии 1.0.0

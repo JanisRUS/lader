@@ -1,3 +1,9 @@
+lader (0.1.0) testing; urgency=medium
+
+  * The basic functionality of the project has been implemented
+
+ -- JanisRUS <janisrus35@gmail.com>  Mon, 1 Jul 2026 1:48:15 +0300
+
 lader (0.0.1) testing; urgency=medium
 
   * Project template created

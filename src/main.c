@@ -21,7 +21,7 @@ static const char *PROGRAMM_NAME = "lader";
 
 /// @brief      Версия ПО
 /// @warning    Должна соответствовать актуальной версии из файла debian/changelog
-static const char *PROGRAMM_VERSION = "0.0.1";
+static const char *PROGRAMM_VERSION = "0.1.0";
 
 /// @brief      Суффикс выходного файла
 static const char *OUTPUT_FILE_SUFFIX = "-parsed";
@@ -40,6 +40,13 @@ static void printVersion(void);
 // Внешние функции
 //
 
+/// @brief      Точка входа в программу
+/// @details    Данная функция выполняет парсинг входных аргументов,
+///                 затем выполняет вызов функции lader()
+/// @param[in]  argc Количество аргументов запуска
+/// @param[in]  argv Аргументы запуска
+/// @return     Возвращет 0 в случае успешного выполнения операции
+///                 В противном случае, возвращает 1
 int main(int argc, char *argv[])
 {
     bool  isOk      = true;
@@ -67,7 +74,7 @@ int main(int argc, char *argv[])
         {
             if (fileIndex != -1)
             {
-                fprintf(stderr, "%s: provide options before file\n", PROGRAMM_NAME);
+                fprintf(stderr, "%s: provide options before the input file\n", PROGRAMM_NAME);
                 isOk = false;
                 goto cleanup;
             }
@@ -145,7 +152,7 @@ int main(int argc, char *argv[])
 
     if (access(fileInput, R_OK) != 0)
     {
-        fprintf(stderr, "%s: unable to read the file '%s'\n", PROGRAMM_NAME, fileInput);
+        fprintf(stderr, "%s: unable to read the input file '%s'\n", PROGRAMM_NAME, fileInput);
         isOk = false;
         goto cleanup;
     }
@@ -177,7 +184,7 @@ int main(int argc, char *argv[])
 
             strncpy(fileOutput, fileNamePtr, fileNameBaseLength);
             fileOutput[fileNameBaseLength] = '\0';
-            
+
             strcat(fileOutput, OUTPUT_FILE_SUFFIX);
             strcat(fileOutput, dotPtr);
         }
@@ -210,7 +217,7 @@ int main(int argc, char *argv[])
             }
             case LaderErrorCodeLengthInvalid:
             {
-                fprintf(stderr, "%s: the length of the output file data packages varies\n", PROGRAMM_NAME);
+                fprintf(stderr, "%s: the length of the output file data packets varies\n", PROGRAMM_NAME);
                 break;
             }
             default:
@@ -252,9 +259,9 @@ cleanup:
 
 void printHelp(void)
 {
-    printf("Usage: %s [OPTIONS] FILE\n", PROGRAMM_NAME);
-    printf("Performs parsing of logic analyzer data from the specified FILE\n");
-    printf("All parsed data will be written to a FILE with the %s suffix\n", OUTPUT_FILE_SUFFIX);
+    printf("Usage: %s [OPTIONS] INPUT_FILE\n", PROGRAMM_NAME);
+    printf("Performs parsing of logic analyzer data from the specified INPUT_FILE\n");
+    printf("All parsed data will be written to a INPUT_FILE with the %s suffix\n", OUTPUT_FILE_SUFFIX);
     printf("\n");
     printf("    -h --help                    Prints this message then exit with code 0\n");
     printf("    -o --output-file OUTPUT_FILE Specifies OUTPUT_FILE as the output\n");

@@ -28,13 +28,13 @@ endif()
 # Настройка проекта
 #
 
-set(SOURCES_DIR   "${CMAKE_CURRENT_SOURCE_DIR}/src")
-set(HEADERS_DIR   "${CMAKE_CURRENT_SOURCE_DIR}/include")
+set(SOURCES_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src")
+set(HEADERS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/include")
 
-file(GLOB_RECURSE SOURCES   "${SOURCES_DIR}/*.c")
-file(GLOB_RECURSE HEADERS   "${HEADERS_DIR}/*.h")
+file(GLOB_RECURSE SOURCES "${SOURCES_DIR}/*.c")
+file(GLOB_RECURSE HEADERS "${HEADERS_DIR}/*.h")
 
-add_executable(${PROJECT_NAME} ${EXECUTABLE_OPTIONS} ${SOURCES} ${HEADERS} ${UIS} ${RESOURCES})
+add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})
 
 target_include_directories(${PROJECT_NAME} PRIVATE ${HEADERS_DIR})
 
@@ -54,3 +54,15 @@ install(TARGETS ${PROJECT_NAME}
 add_custom_target(uninstall
                   COMMENT "Removing installed files"
                   COMMAND ${CMAKE_COMMAND} -P ${CMAKE_SOURCE_DIR}/cmake/uninstall.cmake)
+
+#
+# Настройка правила создания документации
+#
+if (DOXYGEN)
+    add_custom_target(doc
+        COMMAND ${DOXYGEN} Doxyfile > ${CMAKE_BINARY_DIR}/doxygen.log 2>&1
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/doc
+        COMMENT "Generating HTML documentation. Log file: ${CMAKE_BINARY_DIR}/doxygen.log"
+        VERBATIM
+    )
+endif()
