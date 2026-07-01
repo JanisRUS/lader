@@ -49,10 +49,10 @@ readonly NOT_OK=1
 #
 
 # @brief    Суффикс временного файла для генерации входного файла
-readonly TEMP_FILE_SUFFIX_FOR_INPUT=".for_input"
+readonly TEMP_FILE_SUFFIX_FOR_INPUT="for_input"
 
 # @brief    Суффикс временного файла для генерации выходного файла
-readonly TEMP_FILE_SUFFIX_FOR_OUTPUT=".for_output"
+readonly TEMP_FILE_SUFFIX_FOR_OUTPUT="for_output"
 
 # @brief    Синхромаркер
 readonly TEMP_FILE_SYNC_MARK="00011010110011111111110000011101"
@@ -144,8 +144,8 @@ COMMON_OUTPUT_FILE_PATH="$COMMON_SCRIPT_DIR/$COMMON_SCRIPT_NAME.output"
 # @details  Данная функция выполняет удаление созданных функцией tempFileGenerate() временных файлов
 function cleanup()
 {
-    rm "${COMMON_TEMP_FILE_PATH}${TEMP_FILE_SUFFIX_FOR_INPUT}"  2> /dev/null
-    rm "${COMMON_TEMP_FILE_PATH}${TEMP_FILE_SUFFIX_FOR_OUTPUT}" 2> /dev/null
+    rm "${COMMON_TEMP_FILE_PATH}.${TEMP_FILE_SUFFIX_FOR_INPUT}"  2> /dev/null
+    rm "${COMMON_TEMP_FILE_PATH}.${TEMP_FILE_SUFFIX_FOR_OUTPUT}" 2> /dev/null
 }
 
 # @brief    Главная функция
@@ -365,36 +365,42 @@ function randomChance()
 #           COMMON_TEMP_FILE_SYNC_MARK_CORRUPT_CHANCE
 #           COMMON_TEMP_FILE_DATA_CORRUPT_CHANCE
 #           COMMON_TEMP_FILE_PACKET_LENGTH
-# @param    TEMP_FILE_PATH           Путь до временного файла
+# @param    TEMP_FILE_PATH Путь до временного файла
 # @return   Возвращает ALL_OK в случае успешного создания временных файлов.
 #               В противном случае, возвращает NOT_OK
 function tempFileGenerate()
 {
-    local TEMP_FILE_FOR_INPUT_PATH="${COMMON_TEMP_FILE_PATH}${TEMP_FILE_SUFFIX_FOR_INPUT}"
-    local TEMP_FILE_FOR_OUTPUT_PATH="${COMMON_TEMP_FILE_PATH}${TEMP_FILE_SUFFIX_FOR_OUTPUT}"
+    local TEMP_FILE_FOR_INPUT_PATH="${COMMON_TEMP_FILE_PATH}.${TEMP_FILE_SUFFIX_FOR_INPUT}"
+    local TEMP_FILE_FOR_OUTPUT_PATH="${COMMON_TEMP_FILE_PATH}.${TEMP_FILE_SUFFIX_FOR_OUTPUT}"
 
     truncate -s 0 "$TEMP_FILE_FOR_INPUT_PATH"  || return $NOT_OK
     truncate -s 0 "$TEMP_FILE_FOR_OUTPUT_PATH" || return $NOT_OK
 
+    exec 3>>"$TEMP_FILE_FOR_INPUT_PATH"
+    exec 4>>"$TEMP_FILE_FOR_OUTPUT_PATH"
+
     if ((COMMON_TEMP_FILE_GARBAGE_BEFORE > 0))
     then
         tempFileGenerateBits "$COMMON_TEMP_FILE_GARBAGE_BEFORE"
-        printf "%s" "$COMMON_TEMP_FILE_GENERATED_BITS" >> "$TEMP_FILE_FOR_INPUT_PATH"
+        printf "%s\n" "$COMMON_TEMP_FILE_GENERATED_BITS" >&3
     fi
 
     local i=0
     for ((i = 0; i < COMMON_TEMP_FILE_PACKETS_COUNT; ++i))
     do
         tempFileGeneratePacket "$COMMON_TEMP_FILE_SYNC_MARK_CORRUPT_CHANCE" "$COMMON_TEMP_FILE_DATA_CORRUPT_CHANCE" "$COMMON_TEMP_FILE_PACKET_LENGTH"
-        printf "%s" "$COMMON_TEMP_FILE_GENERATED_PACKET_BITS" >> "$TEMP_FILE_FOR_INPUT_PATH"
-        printf "%s" "$COMMON_TEMP_FILE_GENERATED_PACKET_BITS" >> "$TEMP_FILE_FOR_OUTPUT_PATH"
+        printf "%s\n" "$COMMON_TEMP_FILE_GENERATED_PACKET_BITS" >&3
+        printf "%s\n" "$COMMON_TEMP_FILE_GENERATED_PACKET_BITS" >&4
     done
 
     if ((COMMON_TEMP_FILE_GARBAGE_AFTER > 0))
     then
         tempFileGenerateBits "$COMMON_TEMP_FILE_GARBAGE_AFTER"
-        printf "%s" "$COMMON_TEMP_FILE_GENERATED_BITS" >> "$TEMP_FILE_FOR_INPUT_PATH"
+        printf "%s\n" "$COMMON_TEMP_FILE_GENERATED_BITS" >&3
     fi
+
+    exec 3>&-
+    exec 4>&-
 
     return $ALL_OK
 }
@@ -535,18 +541,12 @@ function tempFileGenerateBits()
 #               В противном случае, возвращает NOT_OK
 function inputFileEncodeTempFile()
 {
-    local TEMP_FILE_PATH="${COMMON_TEMP_FILE_PATH}${TEMP_FILE_SUFFIX_FOR_INPUT}"
+    local TEMP_FILE_PATH="${COMMON_TEMP_FILE_PATH}.${TEMP_FILE_SUFFIX_FOR_INPUT}"
     local INPUT_FILE_PATH="$2"
 
     truncate -s 0 "$COMMON_INPUT_FILE_PATH" || return $NOT_OK
+    exec       3>>"$COMMON_INPUT_FILE_PATH"
 
-    if ((COMMON_INPUT_FILE_GARBAGE_BEFORE > 0))
-    then
-        inputFileEncodeLevel "$((RANDOM % 2))" "$COMMON_INPUT_FILE_GARBAGE_BEFORE" 0
-        printf "%s" "$INPUT_FILE_ENCODED_LEVEL_BYTES" >> "$COMMON_INPUT_FILE_PATH"
-    fi
-
-    local BIT=""
     local SYNC_LENGTH_LEFT=$((COMMON_INPUT_FILE_SYNC_LENGTH / 2))
     local SYNC_LENGTH_RIGHT=$((COMMON_INPUT_FILE_SYNC_LENGTH - SYNC_LENGTH_LEFT))
 
@@ -556,71 +556,104 @@ function inputFileEncodeTempFile()
         SYNC_LENGTH_RIGHT=0
     fi
 
-    inputFileEncodeLevel "$INPUT_FILE_LEVEL_SYNC" "$SYNC_LENGTH_RIGHT" 0
-
-    while IFS= read -r -n1 BIT
-    do
-        [[ "$BIT" != "0" && "$BIT" != "1" ]] && continue
-
-        inputFileEncodeFrame                 \
-            "$BIT"                           \
-            "$COMMON_INPUT_FILE_DATA_LENGTH" \
-            "$SYNC_LENGTH_LEFT"              \
-            "$SYNC_LENGTH_RIGHT"             \
-            "$COMMON_INPUT_FILE_LEVEL_CORRUPT_CHANCE"
-
-        printf "%s" "$INPUT_FILE_ENCODED_FRAME_BYTES" >> "$COMMON_INPUT_FILE_PATH"
-    done < "$TEMP_FILE_PATH"
-
     inputFileEncodeLevel "$INPUT_FILE_LEVEL_SYNC" "$SYNC_LENGTH_LEFT" 0
+    local BYTES_SYNC_LEFT="$INPUT_FILE_ENCODED_LEVEL_BYTES"
+
+    inputFileEncodeLevel "$INPUT_FILE_LEVEL_SYNC" "$SYNC_LENGTH_RIGHT" 0
+    local BYTES_SYNC_RIGHT="$INPUT_FILE_ENCODED_LEVEL_BYTES"
+
+    inputFileEncodeLevel "$INPUT_FILE_LEVEL_DATA_0" "$COMMON_INPUT_FILE_DATA_LENGTH" 0
+    local BYTES_DATA_0="$INPUT_FILE_ENCODED_LEVEL_BYTES"
+
+    inputFileEncodeLevel "$INPUT_FILE_LEVEL_DATA_1" "$COMMON_INPUT_FILE_DATA_LENGTH" 0
+    local BYTES_DATA_1="$INPUT_FILE_ENCODED_LEVEL_BYTES"
+
+    inputFileEncodeLevel "$INPUT_FILE_LEVEL_DATA_0" "$COMMON_INPUT_FILE_DATA_LENGTH" 100
+    local BYTES_DATA_0_CORRUPTED="$INPUT_FILE_ENCODED_LEVEL_BYTES"
+
+    inputFileEncodeLevel "$INPUT_FILE_LEVEL_DATA_1" "$COMMON_INPUT_FILE_DATA_LENGTH" 100
+    local BYTES_DATA_1_CORRUPTED="$INPUT_FILE_ENCODED_LEVEL_BYTES"
+
+    if ((COMMON_INPUT_FILE_GARBAGE_BEFORE > 0))
+    then
+        inputFileEncodeLevel "$((RANDOM % 2))" "$COMMON_INPUT_FILE_GARBAGE_BEFORE" 0
+        printf "%s" "$INPUT_FILE_ENCODED_LEVEL_BYTES" >&3
+    fi
+
+    ((SYNC_LENGTH_RIGHT > 0)) && printf '%s' "$BYTES_SYNC_RIGHT" >&3
+
+    awk -v syncLeft="$BYTES_SYNC_LEFT" \
+        -v syncRight="$BYTES_SYNC_RIGHT" \
+        -v data0="$BYTES_DATA_0" \
+        -v data1="$BYTES_DATA_1" \
+        -v data0Currupted="$BYTES_DATA_0_CORRUPTED" \
+        -v data1Currupted="$BYTES_DATA_1_CORRUPTED" \
+        -v curruptChance="$COMMON_INPUT_FILE_LEVEL_CORRUPT_CHANCE" \
+    '
+    function write(text)
+    {
+        printf "%s", text
+    }
+
+    BEGIN {
+        srand()
+    }
+
+    {
+        for (i = 1; i <= length($0); ++i) 
+        {
+            bit = substr($0, i, 1)
+
+            if (bit != "0" && bit != "1")
+            {
+                continue
+            }
+
+            if (syncLeft != "")
+            {
+                write(syncLeft)
+            }
+
+            if (rand() * 100 < curruptChance) 
+            {
+                if (bit == "0")
+                {
+                    write(data0Currupted)
+                }
+                else if (bit == "1")
+                {
+                    write(data1Currupted)
+                }
+            }
+            else 
+            {
+                if (bit == "0")
+                {
+                    write(data0)
+                }
+                else if (bit == "1")
+                {
+                    write(data1)
+                }
+            }
+
+            if (syncRight != "")
+            {
+                write(syncRight)
+            }
+        }
+    }
+    ' "$TEMP_FILE_PATH" >&3
+
+    ((SYNC_LENGTH_LEFT > 0)) && printf '%s' "$BYTES_SYNC_LEFT" >&3
 
     if ((COMMON_INPUT_FILE_GARBAGE_AFTER > 0))
     then
         inputFileEncodeLevel "$((RANDOM % 2))" "$COMMON_INPUT_FILE_GARBAGE_AFTER" 0
-        printf "%s" "$INPUT_FILE_ENCODED_LEVEL_BYTES" >> "$COMMON_INPUT_FILE_PATH"
+        printf "%s" "$INPUT_FILE_ENCODED_LEVEL_BYTES" >&3
     fi
 
-    return $ALL_OK
-}
-
-# @brief    Сгенерированная функцией inputFileEncodeFrame() последовательность байт
-INPUT_FILE_ENCODED_FRAME_BYTES=""
-
-# @brief    Функция кодирования информационного бита
-# @details  Данная функция выполняет кодирование информационного бита VALUE в формат входного файла:
-#               - Кодированный синхроимпульс SYNC_LENGTH_LEFT  раз
-#               - Кодированное значение бита VALUE DATA_LEGNTH раз
-#               - Кодированный синхроимпульс SYNC_LENGTH_RIGHT раз
-# @param    VALUE             Значение информационного бита (0 или 1)
-# @param    DATA_LENGTH       Количество повторений кодированного бита. Должно быть не меньше 1
-# @param    SYNC_LENGTH_LEFT  Количество повторений синхроимпульса до бита. Должно быть не меньше 0
-# @param    SYNC_LENGTH_RIGHT Количество повторений синхроимпульса до бита. Должно быть не меньше 0
-# @param    CORRUPT_CHANCE    Шанс повреждения бита при кодировании. Должен быть в диапазоне [0:100]
-# @return   Всегда возвращает $ALL_OK
-function inputFileEncodeFrame()
-{
-    local VALUE="$1"
-    local DATA_LENGTH="$2"
-    local SYNC_LENGTH_LEFT="$3"
-    local SYNC_LENGTH_RIGHT="$4"
-    local CORRUPT_CHANCE="$5"
-
-    INPUT_FILE_ENCODED_FRAME_BYTES=""
-
-    if ((SYNC_LENGTH_LEFT > 0))
-    then
-        inputFileEncodeLevel "$INPUT_FILE_LEVEL_SYNC" "$SYNC_LENGTH_LEFT" 0
-        INPUT_FILE_ENCODED_FRAME_BYTES+="$INPUT_FILE_ENCODED_LEVEL_BYTES"
-    fi
-
-    inputFileEncodeLevel "$VALUE" "$DATA_LENGTH" "$CORRUPT_CHANCE"
-    INPUT_FILE_ENCODED_FRAME_BYTES+="$INPUT_FILE_ENCODED_LEVEL_BYTES"
-
-    if ((SYNC_LENGTH_RIGHT > 0))
-    then
-        inputFileEncodeLevel "$INPUT_FILE_LEVEL_SYNC" "$SYNC_LENGTH_RIGHT" 0
-        INPUT_FILE_ENCODED_FRAME_BYTES+="$INPUT_FILE_ENCODED_LEVEL_BYTES"
-    fi
+    exec 3>&-
 
     return $ALL_OK
 }
@@ -675,8 +708,11 @@ function inputFileEncodeLevel()
 
     local CORRUPT_START=$((REPEAT_COUNT / 2 - 1))
 
-    RESULT=$(printf '%*s' "$REPEAT_COUNT" '')
-    RESULT=${RESULT// /$BYTE}
+    local i=0
+    for ((i = 0; i < REPEAT_COUNT; ++i))
+    do
+        RESULT+="$BYTE"
+    done
 
     if ((IS_CORRUPTED))
     then
@@ -738,35 +774,66 @@ function inputFileLevelToByte()
 #               В противном случае, возвращает NOT_OK
 function outputFileEncodeTempFile()
 {
-    local TEMP_FILE_PATH="${COMMON_TEMP_FILE_PATH}${TEMP_FILE_SUFFIX_FOR_OUTPUT}"
+    local TEMP_FILE_PATH="${COMMON_TEMP_FILE_PATH}.${TEMP_FILE_SUFFIX_FOR_OUTPUT}"
 
     truncate -s 0 "$COMMON_OUTPUT_FILE_PATH" || return $NOT_OK
+    exec       3>>"$COMMON_OUTPUT_FILE_PATH"
 
-    local BIT=""
-    local BIT_COUNT=0
-    local BYTE=0
+    awk \
+    '
+    function write(value)
+    {
+        printf "%c", value
+    }
 
-    while IFS= read -r -n1 BIT
-    do
-        [[ "$BIT" != "0" && "$BIT" != "1" ]] && continue
+    function shiftLeft(value, count)
+    {
+        while (count > 0)
+        {
+            value *= 2
+            --count
+        }
+        return value
+    }
 
-        ((BYTE = (BYTE << 1) | BIT))
-        ((++BIT_COUNT))
+    BEGIN {
+        bitCount = 0
+        byte     = 0
+    }
 
-        if ((BIT_COUNT == 8))
-        then
-            printf '%b' "\\$(printf '%03o' "$BYTE")" >> "$COMMON_OUTPUT_FILE_PATH"
+    {
+        for (i = 1; i <= length($0); ++i)
+        {
+            bit = substr($0, i, 1)
 
-            BYTE=0
-            BIT_COUNT=0
-        fi
-    done < "$TEMP_FILE_PATH"
+            if (bit != "0" && bit != "1")
+            {
+                continue
+            }
 
-    if ((BIT_COUNT > 0))
-    then
-        ((BYTE = BYTE << (8 - BIT_COUNT)))
-        printf '%b' "\\$(printf '%03o' "$BYTE")" >> "$COMMON_OUTPUT_FILE_PATH"
-    fi
+            byte = shiftLeft(byte, 1) + bit
+            ++bitCount
+
+            if (bitCount == 8)
+            {
+                write(byte)
+
+                byte     = 0
+                bitCount = 0
+            }
+        }
+    }
+
+    END {
+        if (bitCount > 0)
+        {
+            byte = shiftLeft(byte, 8 - bitCount)
+            write(byte)
+        }
+    }
+    ' "$TEMP_FILE_PATH" >&3
+
+    exec 3>&-
 
     return $ALL_OK
 }

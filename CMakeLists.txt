@@ -80,12 +80,6 @@ endif()
 # Настройка правил тестирования
 #
 
-add_custom_target(testEnv
-    COMMAND bash -c "${CMAKE_SOURCE_DIR}/scripts/makeTestEnv"
-)
-
 add_custom_target(tests
     COMMAND bash -c "${CMAKE_SOURCE_DIR}/scripts/makeTests ${CMAKE_BINARY_DIR}/${PROJECT_NAME}"
 )
-
-add_dependencies(tests testEnv)

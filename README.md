@@ -22,6 +22,7 @@
 
 - `docker`
 - `doxygen`
+- `meld`
 
 ```bash
 sudo apt install build-essential devscripts debhelper fakeroot cmake
@@ -53,8 +54,6 @@ make
 - `doc` — генерация документации при помощи `doxygen`
   
   > Для просмотра документации, откройте `documentation.html` в браузере
-
-- `testEnv` — создание тестовой среды
 
 - `tests` — выполнение тестов
 
@@ -125,11 +124,49 @@ lader "logic-analyzer-data-file.bin"
 lader -o "outputFile.bin" "logic-analyzer-data-file.bin"
 ```
 
+# Тестирование
+
+## Генерация тестовой среды
+
+```bash
+./scripts/makeTestEnv
+```
+
+> Скрипт не поддерживает аргументы
+> 
+> Для изменения параметров тестовой среды, необходимо изменить внутри скрипта следующие переменные:
+> 
+> - `COMMON_PARAMS_PACKETS_COUNT`
+> 
+> - `COMMON_PARAMS_SCENARIOS`
+
+> Сгенерированная тестовая среда будет находиться в директории `tests`
+
+## Тестирование утилиты
+
+Помимо использования правила `make tests`, можно воспользоваться скриптом тестирования вкучную 
+
+```bash
+./scripts/makeTests <PATH_TO_UTILITY> [<TEST_1>_<TYPE>...<TEST_N>_<TYPE>]
+```
+
+> `PATH_TO_UTILITY` — путь к тестируемой утилите
+> 
+> `TEST` — название теста. Совпадает с названием директории в `tests`
+> 
+> `TYPE` — Тип теста:
+> 
+> - `Compare` — сравнительный тест
+
+Пример:
+
+```bash
+./scripts/makeTests build/lader Few_Chaos_Compare
+```
+
 # BUGS
 
 # TODO
-
-- Оптимизировать скрипт для генерации входного и выходного файлов
 
 - Протестировать утилиту
 

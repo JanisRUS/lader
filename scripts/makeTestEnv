@@ -39,9 +39,9 @@ readonly COMMON_TEST_OUTPUT_FILE_NAME="testOutputFile"
 #               3) Минимальное значение
 #               4) Максимальное значение
 readonly COMMON_PARAMS_PACKETS_COUNT=(
-    "PacketsCountSingle tc randomRange 1   1"
-    "PacketsCountFew    tc randomRange 90  110"
-    "PacketsCountMany   tc randomRange 900 1100"
+    "Single tc randomRange 1   1"
+    "Few    tc randomRange 90  110"
+    "Many   tc randomRange 900 1100"
 )
 
 # @brief    Список названий и параметров сценариев
@@ -140,21 +140,23 @@ function main()
         return 1
     fi
 
-    local TEST_ARGS_DEFAULT=" -ib 0\
-                              -ia 0\
-                              -is 8\
-                              -id 64\
-                              -il 0\
-                              -tb 0\
-                              -ta 0\
-                              -ts 0\
-                              -td 0\
-                              -tl 100"
+    local TEST_ARGS_DEFAULT=(
+        -ib 0
+        -ia 0
+        -is 8
+        -id 64
+        -il 0
+        -tb 0
+        -ta 0
+        -ts 0
+        -td 0
+        -tl 100
+    )
 
     for PARAMS_PACKETS_COUNT in "${COMMON_PARAMS_PACKETS_COUNT[@]}"
     do
         local PARAMS_PACKETS_COUNT_NAME=""
-        local PARAMS_PACKETS_COUNT_ARGS=""
+        local PARAMS_PACKETS_COUNT_ARGS=()
 
         if ! paramsParse "$PARAMS_PACKETS_COUNT"
         then
@@ -163,12 +165,12 @@ function main()
         fi
 
         PARAMS_PACKETS_COUNT_NAME="$PARAMS_PARSED_NAME"
-        PARAMS_PACKETS_COUNT_ARGS="$PARAMS_PARSED_ARGS"
+        PARAMS_PACKETS_COUNT_ARGS=("${PARAMS_PARSED_ARGS[@]}")
 
         for PARAMS_SCENARIO in "${COMMON_PARAMS_SCENARIOS[@]}"
         do
             local PARAMS_SCENARIO_NAME=""
-            local PARAMS_SCENARIO_ARGS=""
+            local PARAMS_SCENARIO_ARGS=()
 
             if ! paramsParse "$PARAMS_SCENARIO"
             then
@@ -177,9 +179,15 @@ function main()
             fi
 
             PARAMS_SCENARIO_NAME="$PARAMS_PARSED_NAME"
-            PARAMS_SCENARIO_ARGS="$PARAMS_PARSED_ARGS"
+            PARAMS_SCENARIO_ARGS=("${PARAMS_PARSED_ARGS[@]}")
 
-            if ! makeTest "${PARAMS_PACKETS_COUNT_NAME}_${PARAMS_SCENARIO_NAME}" "${TEST_ARGS_DEFAULT}${PARAMS_PACKETS_COUNT_ARGS}${PARAMS_SCENARIO_ARGS}"
+            local TEST_ARGS=()
+
+            TEST_ARGS+=("${TEST_ARGS_DEFAULT[@]}")
+            TEST_ARGS+=("${PARAMS_PACKETS_COUNT_ARGS[@]}")
+            TEST_ARGS+=("${PARAMS_SCENARIO_ARGS[@]}")
+
+            if ! makeTest "${PARAMS_PACKETS_COUNT_NAME}_${PARAMS_SCENARIO_NAME}" "${TEST_ARGS[@]}"
             then
                 printDetails
                 return 1
@@ -231,7 +239,7 @@ function printDetails()
 PARAMS_PARSED_NAME=""
 
 # @brief    Полученные при помощи функции paramsParse() аргументы COMMON_TEST_DATA_GENERATOR
-PARAMS_PARSED_ARGS=""
+PARAMS_PARSED_ARGS=()
 
 # @brief    Функция парсинга строки параметров
 # @details  Даная функция выполняет разбиение строки PARAMS на элементы,
@@ -247,7 +255,7 @@ function paramsParse()
     local PARAMS="$1"
 
     PARAMS_PARSED_NAME=""
-    PARAMS_PARSED_ARGS=""
+    PARAMS_PARSED_ARGS=()
 
     if [ -z "$PARAMS" ]
     then
@@ -256,7 +264,7 @@ function paramsParse()
     fi
 
     local NAME=""
-    local ARGS=""
+    local ARGS=()
     local PARAMS_PARSED=""
 
     read -ra PARAMS_PARSED <<< "$PARAMS"
@@ -295,11 +303,12 @@ function paramsParse()
             return 1
         fi
 
-        ARGS+=" -$OPTION $VALUE"
+        ARGS+=("-$OPTION")
+        ARGS+=("$VALUE")
     done
 
     PARAMS_PARSED_NAME="$NAME"
-    PARAMS_PARSED_ARGS="$ARGS"
+    PARAMS_PARSED_ARGS=("${ARGS[@]}")
 
     return 0
 }
@@ -309,7 +318,6 @@ function paramsParse()
 # @warning  Функция подставляет после ARGS аргументы -tp -ip -op
 # @param    TEST_NAME Название теста
 # @param    ARGS      Аргументы COMMON_TEST_DATA_GENERATOR для создания теста
-# @note     ARGS передается в COMMON_TEST_DATA_GENERATOR без экранирования
 # @return   Возвращает 0 в случае успешного создания теста.
 #               В противном случае, возвращает 1
 function makeTest()
@@ -320,19 +328,20 @@ function makeTest()
     fi
 
     local TEST_NAME="$1"
-    local ARGS="$2"
+    shift
+    local ARGS=("$@")
     local TEST_DIR="$COMMON_TESTS_DIR/$TEST_NAME"
 
-    ARGS="$(xargs <<< "$ARGS")"
+    ARGS+=(-tp "$TEST_DIR/$COMMON_TEST_TEMP_FILE_NAME")
+    ARGS+=(-ip "$TEST_DIR/$COMMON_TEST_INPUT_FILE_NAME")
+    ARGS+=(-op "$TEST_DIR/$COMMON_TEST_OUTPUT_FILE_NAME")
 
-    ARGS+=" -tp \"$TEST_DIR/$COMMON_TEST_TEMP_FILE_NAME\" -ip \"$TEST_DIR/$COMMON_TEST_INPUT_FILE_NAME\" -op \"$TEST_DIR/$COMMON_TEST_OUTPUT_FILE_NAME\""
-
-    echo -n "Creating $TEST_NAME test... " | tee -a "$COMMON_LOG"
+    echo -n "Creating test $TEST_NAME... " | tee -a "$COMMON_LOG"
 
     {
         echo
         echo "Command:"
-        echo "$COMMON_TEST_DATA_GENERATOR $ARGS"
+        printf '%q ' "$COMMON_TEST_DATA_GENERATOR" "${ARGS[@]}"
     } >> "$COMMON_LOG"
 
     if ! mkdir "$TEST_DIR" >> "$COMMON_LOG" 2>&1
@@ -341,7 +350,7 @@ function makeTest()
         return 1
     fi
 
-    if ! $COMMON_TEST_DATA_GENERATOR $ARGS 
+    if ! $COMMON_TEST_DATA_GENERATOR "${ARGS[@]}"
     then
         echo "Failed to create test $TEST_NAME" | tee -a "$COMMON_LOG"
         return 1
