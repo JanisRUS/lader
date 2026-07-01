@@ -1,0 +1,148 @@
+#!/bin/bash
+
+# @file     makeTestEnv
+# @brief    Скрипт создания тестовой среды для проверки утилиты ladder
+
+#
+# Константы
+#
+
+# @brief    Директория скрипта
+readonly COMMON_SCRIPT_DIR="$(dirname "$(realpath "$0")")"
+
+# @brief    Название скрипта
+readonly COMMON_SCRIPT_NAME="$(basename "$0")"
+
+# @brief    Лог-файл
+readonly COMMON_LOG="/tmp/$COMMON_SCRIPT_NAME.log"
+
+# @brief    Директория с тестовым окружением
+readonly COMMON_TESTS_DIR="$COMMON_SCRIPT_DIR/../tests"
+
+# @brief    Скрипт для генерации входного и выходного файлов
+readonly COMMON_TEST_DATA_GENERATOR="$COMMON_SCRIPT_DIR/testDataGenerator"
+
+# @brief    Название тестовых временных файлов
+readonly COMMON_TEST_TEMP_FILE_NAME="testTempFile"
+
+# @brief    Название тестовых входных файлов
+readonly COMMON_TEST_INPUT_FILE_NAME="testInputFile"
+
+# @brief    Название тестовых выходных файлов
+readonly COMMON_TEST_OUTPUT_FILE_NAME="testOutputFile"
+
+# @brief    Список тестов TODO
+readonly COMMON_TESTS_LIST=(TODO)
+
+#
+# Функции
+#
+
+# @brief    Основная функция скрипта
+# @details  Данная функция выполняет вызов prepare() и
+#               последовательную генерацию новой тестовой среды в 
+#               соответствии со списком COMMON_TESTS_LIST
+# @return   Возвращает 0 в случае успешного создания тестовой среды.
+#               В противном случае, возвращет 1
+function main()
+{
+    if ! prepare
+    then
+        return 1
+    fi
+
+    local TEST=""
+    for TEST in "${COMMON_TESTS_LIST[@]}"
+    do
+        # TODO подготовка аргументов для makeTest
+        if ! makeTest "$TEST" "${ARGS[@]}" >> "$COMMON_LOG" 2>&1
+        then
+            printDetails
+            return 1
+        fi
+    done
+
+    return 0
+}
+
+# @brief    Функция подготовки рабочего окружения
+# @details  Данная функция выполняет инициализацию лог-файла, 
+#               удаление существующей тестовой среды и 
+#               создание пустой директории COMMON_TESTS_DIR
+# @return   Возвращает 0 в случае успешной подготовки рабочего окружения.
+#               В противном случае, возвращет 1
+function prepare()
+{
+    if ! truncate -s 0 "$COMMON_LOG"
+    then
+        echo "Failed to truncate $COMMON_LOG!"
+        return 1
+    fi
+
+    if [ -d "$COMMON_TESTS_DIR" ]
+    then
+        echo -n "Clearing existing test environment... "
+        rm -r "$COMMON_TESTS_DIR" >> "$COMMON_LOG" 2>&1
+        echo "Done"
+    fi
+
+    if ! mkdir -p "$COMMON_TESTS_DIR" >> "$COMMON_LOG" 2>&1
+    then
+        echo "Failed to create $COMMON_TESTS_DIR"
+        printDetails
+        return 1
+    fi
+
+    return 0
+}
+
+# @brief    Функция создания теста
+# @details  Данная функция выполняет создание теста TEST при помощи COMMON_TEST_DATA_GENERATOR с аргументами ARGS
+# @warning  Функция подставляет после ARGS аргументы -tp -ip -op
+# @param    TEST_NAME Название теста
+# @param    ARGS      Аргументы COMMON_TEST_DATA_GENERATOR для создания теста
+# @note     ARGS передается в COMMON_TEST_DATA_GENERATOR без экранирования
+# @return   Возвращает 0 в случае успешного создания теста.
+#               В противном случае, возвращает 1
+function makeTest()
+{
+    if [ -z "$1" ]
+    then
+        return 1
+    fi
+
+    local TEST_NAME="$1"
+    local ARGS="$2"
+    local TEST_DIR="$COMMON_TESTS_DIR/$TEST_NAME"
+
+    echo -n "Creating $TEST_NAME test... "
+
+    if ! mkdir "$TEST_DIR" >> "$COMMON_LOG" 2>&1
+    then
+        echo "Failed to create $TEST_DIR directory"
+        return 1
+    fi
+
+    if ! $COMMON_TEST_DATA_GENERATOR $ARGS -tp "$TEST_DIR/$COMMON_TEST_TEMP_FILE_NAME" -ip "$TEST_DIR/$COMMON_TEST_INPUT_FILE_NAME" -op "$TEST_DIR/$COMMON_TEST_OUTPUT_FILE_NAME"
+    then
+        echo "Failed to create test $TEST_NAME"
+        return 1
+    fi
+
+    echo "Done"
+
+    return 0
+}
+
+# @brief    Функция вывода сообщения с командой для получения деталей об ошибке
+function printDetails()
+{
+    echo -e "Details:\n\tcat $COMMON_LOG"
+}
+
+#
+# Точка входа в скрипт
+#
+
+main
+exit $?

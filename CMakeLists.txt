@@ -24,6 +24,15 @@ else()
     message(STATUS "Command to install this package:\n\t sudo apt install doxygen")
 endif()
 
+# Проверка наличия в системе meld
+find_program(MELD meld)
+if (MELD)
+    message(STATUS "Meld found: ${MELD}")
+else()
+    message(STATUS "Meld not found. Failed Comapre tests will not be visualized")
+    message(STATUS "Command to install this package:\n\t sudo apt install meld")
+endif()
+
 #
 # Настройка проекта
 #
@@ -66,3 +75,17 @@ if (DOXYGEN)
         VERBATIM
     )
 endif()
+
+#
+# Настройка правил тестирования
+#
+
+add_custom_target(testEnv
+    COMMAND bash -c "${CMAKE_SOURCE_DIR}/scripts/makeTestEnv"
+)
+
+add_custom_target(tests
+    COMMAND bash -c "${CMAKE_SOURCE_DIR}/scripts/makeTests ${CMAKE_BINARY_DIR}/${PROJECT_NAME}"
+)
+
+add_dependencies(tests testEnv)

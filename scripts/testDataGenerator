@@ -33,7 +33,7 @@ readonly COMMON_INPUT_FILE_GARBAGE_BEFORE_MIN="0"
 readonly COMMON_INPUT_FILE_GARBAGE_AFTER_MIN="0"
 
 # @brief    Минимальная длина каждого синхроимпульса во входном файле
-readonly COMMON_INPUT_FILE_SYNC_LENGTH_MIN="2"
+readonly COMMON_INPUT_FILE_SYNC_LENGTH_MIN="1"
 
 # @brief    Минимальная длина каждого информационного уровня во входном файле
 readonly COMMON_INPUT_FILE_DATA_LENGTH_MIN="1"
@@ -220,7 +220,7 @@ function main ()
                 shift
                 shift
             ;;
-            -id|--input-file-sync-length)
+            -id|--input-file-data-length)
                 COMMON_INPUT_FILE_DATA_LENGTH=$(validateUInt "$2" "$COMMON_INPUT_FILE_DATA_LENGTH_MIN")
                 shift
                 shift
@@ -280,7 +280,7 @@ function main ()
 # @return   Возвращает ALL_OK
 function printHelp ()
 {
-    echo -e "Usage: scripts/$COMMON_SCRIPT_FILE [OPTIONS]"
+    echo -e "Usage: $(realpath --relative-to=. "$COMMON_SCRIPT_DIR" 2> /dev/null)/$COMMON_SCRIPT_NAME [OPTIONS]"
     echo -e ""
     echo -e "Creates an input and output file with the specified options"
     echo -e ""
@@ -295,7 +295,7 @@ function printHelp ()
     echo -e "  -ib --input-file-garbage-before          \t Sets the number of bytes before the first synchropulse in the input file"
     echo -e "  -ia --input-file-garbage-after           \t Sets the number of bytes after the last synchropulse in the input file"
     echo -e "  -is --input-file-sync-length             \t Sets the length of each synchropulse in the input file"
-    echo -e "  -id --input-file-sync-length             \t Sets the length of each information level in the input file"
+    echo -e "  -id --input-file-data-length             \t Sets the length of each information level in the input file"
     echo -e "  -il --input-file-level-corrupt-chance    \t Sets the chance to corrupt each information level in the input file"
     echo -e "  -op --output-file-path                   \t Sets the path to the output file"
     echo -e "  -h  --help                               \t Shows this message"
@@ -550,6 +550,12 @@ function inputFileEncodeTempFile()
     local SYNC_LENGTH_LEFT=$((COMMON_INPUT_FILE_SYNC_LENGTH / 2))
     local SYNC_LENGTH_RIGHT=$((COMMON_INPUT_FILE_SYNC_LENGTH - SYNC_LENGTH_LEFT))
 
+    if ((COMMON_INPUT_FILE_SYNC_LENGTH == 1))
+    then
+        SYNC_LENGTH_LEFT=1
+        SYNC_LENGTH_RIGHT=0
+    fi
+
     inputFileEncodeLevel "$INPUT_FILE_LEVEL_SYNC" "$SYNC_LENGTH_RIGHT" 0
 
     while IFS= read -r -n1 BIT
@@ -587,28 +593,34 @@ INPUT_FILE_ENCODED_FRAME_BYTES=""
 #               - Кодированный синхроимпульс SYNC_LENGTH_RIGHT раз
 # @param    VALUE             Значение информационного бита (0 или 1)
 # @param    DATA_LENGTH       Количество повторений кодированного бита. Должно быть не меньше 1
-# @param    SYNC_LENGTH_LEFT  Количество повторений синхроимпульса до бита. Должно быть не меньше 1
-# @param    SYNC_LENGTH_RIGHT Количество повторений синхроимпульса до бита. Должно быть не меньше 1
+# @param    SYNC_LENGTH_LEFT  Количество повторений синхроимпульса до бита. Должно быть не меньше 0
+# @param    SYNC_LENGTH_RIGHT Количество повторений синхроимпульса до бита. Должно быть не меньше 0
 # @param    CORRUPT_CHANCE    Шанс повреждения бита при кодировании. Должен быть в диапазоне [0:100]
 # @return   Всегда возвращает $ALL_OK
 function inputFileEncodeFrame()
 {
     local VALUE=$(validateUInt "$1" 0)
     local DATA_LENGTH=$(validateUInt "$2" 1)
-    local SYNC_LENGTH_LEFT=$(validateUInt "$3" 1)
-    local SYNC_LENGTH_RIGHT=$(validateUInt "$4" 1)
+    local SYNC_LENGTH_LEFT=$(validateUInt "$3" 0)
+    local SYNC_LENGTH_RIGHT=$(validateUInt "$4" 0)
     local CORRUPT_CHANCE=$(validateChance "$5")
 
     INPUT_FILE_ENCODED_FRAME_BYTES=""
 
-    inputFileEncodeLevel "$INPUT_FILE_LEVEL_SYNC" "$SYNC_LENGTH_LEFT" 0
-    INPUT_FILE_ENCODED_FRAME_BYTES+="$INPUT_FILE_ENCODED_LEVEL_BYTES"
+    if ((SYNC_LENGTH_LEFT > 0))
+    then
+        inputFileEncodeLevel "$INPUT_FILE_LEVEL_SYNC" "$SYNC_LENGTH_LEFT" 0
+        INPUT_FILE_ENCODED_FRAME_BYTES+="$INPUT_FILE_ENCODED_LEVEL_BYTES"
+    fi
 
     inputFileEncodeLevel "$VALUE" "$DATA_LENGTH" "$CORRUPT_CHANCE"
     INPUT_FILE_ENCODED_FRAME_BYTES+="$INPUT_FILE_ENCODED_LEVEL_BYTES"
 
-    inputFileEncodeLevel "$INPUT_FILE_LEVEL_SYNC" "$SYNC_LENGTH_RIGHT" 0
-    INPUT_FILE_ENCODED_FRAME_BYTES+="$INPUT_FILE_ENCODED_LEVEL_BYTES"
+    if ((SYNC_LENGTH_RIGHT > 0))
+    then
+        inputFileEncodeLevel "$INPUT_FILE_LEVEL_SYNC" "$SYNC_LENGTH_RIGHT" 0
+        INPUT_FILE_ENCODED_FRAME_BYTES+="$INPUT_FILE_ENCODED_LEVEL_BYTES"
+    fi
 
     return $ALL_OK
 }
