@@ -1,0 +1,478 @@
+#!/bin/bash
+
+# @file     makeTestEnv
+# @brief    Скрипт создания тестовой среды для проверки утилиты ladder
+
+#
+# Константы
+#
+
+# @brief    Директория скрипта
+readonly COMMON_SCRIPT_DIR="$(dirname "$(realpath "$0")")"
+
+# @brief    Название скрипта
+readonly COMMON_SCRIPT_NAME="$(basename "$0")"
+
+# @brief    Лог-файл
+readonly COMMON_LOG="/tmp/$COMMON_SCRIPT_NAME.log"
+
+# @brief    Директория с тестовым окружением
+readonly COMMON_TESTS_DIR="$COMMON_SCRIPT_DIR/../tests"
+
+# @brief    Скрипт для генерации входного и выходного файлов
+readonly COMMON_TEST_DATA_GENERATOR="$COMMON_SCRIPT_DIR/testDataGenerator"
+
+# @brief    Название тестовых временных файлов
+readonly COMMON_TEST_TEMP_FILE_NAME="testTempFile"
+
+# @brief    Название тестовых входных файлов
+readonly COMMON_TEST_INPUT_FILE_NAME="testInputFile"
+
+# @brief    Название тестовых выходных файлов
+readonly COMMON_TEST_OUTPUT_FILE_NAME="testOutputFile"
+
+# @brief    Список названий и параметров количества пакетов
+# @note     Каждый элемент должен начинаться с названия количества пакетов.
+#               За ним, опционально, могут идти описания параметров, состоящие из 4 слов:
+#               1) Название аргумента для COMMON_TEST_DATA_GENERATOR
+#               2) Название функции получения значения
+#               3) Минимальное значение
+#               4) Максимальное значение
+readonly COMMON_PARAMS_PACKETS_COUNT=(
+    "Single tc randomRange 1   1"
+    "Few    tc randomRange 90  110"
+    "Many   tc randomRange 900 1100"
+)
+
+# @brief    Список названий и параметров сценариев
+# @note     Каждый элемент должен начинаться с названия сценария.
+#               За ним, опционально, могут идти описания параметров, состоящие из 4 слов:
+#               1) Название аргумента для COMMON_TEST_DATA_GENERATOR
+#               2) Название функции получения значения
+#               3) Минимальное значение
+#               4) Максимальное значение
+readonly COMMON_PARAMS_SCENARIOS=(
+    "Clear"
+
+    "InputGarbageBefore    ib randomRange 90   110"
+
+    "InputGarbageAfter     ia randomRange 90   110"
+
+    "InputGarbage          ib randomRange 90   110\
+                           ia randomRange 90   110"
+
+    "SyncSingle            is randomRange 1    1"
+
+    "SyncFew               is randomRange 5    15"
+
+    "SyncMany              is randomRange 40   60"
+
+    "DataSingle            id randomRange 1    1"
+
+    "DataFewEven           id randomEven  6    16"
+
+    "DataFewOdd            id randomOdd   5    15"
+
+    "DataManyEven          id randomEven  40   60"
+
+    "DataManyOdd           id randomOdd   41   61"
+
+    "CorruptedDataSingle   id randomRange 1    1\
+                           il randomRange 50   50"
+
+    "CorruptedDataFewEven  id randomEven  6    16\
+                           il randomRange 50   50"
+
+    "CorruptedDataFewOdd   id randomOdd   5    15\
+                           il randomRange 50   50"
+
+    "CorruptedDataManyEven id randomEven  40   60\
+                           il randomRange 50   50"
+
+    "CorruptedDataManyOdd  id randomOdd   41   61\
+                           il randomRange 50   50"
+
+    "TempGarbageBefore     tb randomRange 90   110"
+
+    "TempGarbageAfter      ta randomRange 90   110"
+
+    "TempGarbage           tb randomRange 90   110\
+                           ta randomRange 90   110"
+
+    "CorruptedSyncMark     ts randomRange 50   50"
+
+    "CorruptedPackets      td randomRange 50   50"
+
+    "PacketLengthEmpty     tl randomRange 32   32"
+
+    "PacketLengthSingle    tl randomRange 33   33"
+
+    "PacketLengthFew       tl randomRange 400  600"
+
+    "PacketLengthMany      tl randomRange 4000 6000"
+
+    "Chaos                 ib randomRange 0    200\
+                           ia randomRange 0    200\
+                           is randomRange 1    100\
+                           id randomRange 1    100\
+                           il randomRange 0    100\
+                           tb randomRange 0    200\
+                           ta randomRange 0    200\
+                           ts randomRange 0    100\
+                           td randomRange 0    100\
+                           tl randomRange 32   2000"
+)
+
+#
+# Функции
+#
+
+# @brief    Основная функция скрипта
+# @details  Данная функция выполняет вызов prepare() и
+#               последовательную генерацию новой тестовой среды в 
+#               соответствии со списками COMMON_PARAMS_PACKETS_COUNT и COMMON_PARAMS_SCENARIOS
+# @return   Возвращает 0 в случае успешного создания тестовой среды.
+#               В противном случае, возвращет 1
+function main()
+{
+    if ! prepare
+    then
+        return 1
+    fi
+
+    local TEST_ARGS_DEFAULT=(
+        -ib 0
+        -ia 0
+        -is 8
+        -id 64
+        -il 0
+        -tb 0
+        -ta 0
+        -ts 0
+        -td 0
+        -tl 100
+    )
+
+    for PARAMS_PACKETS_COUNT in "${COMMON_PARAMS_PACKETS_COUNT[@]}"
+    do
+        local PARAMS_PACKETS_COUNT_NAME=""
+        local PARAMS_PACKETS_COUNT_ARGS=()
+
+        if ! paramsParse "$PARAMS_PACKETS_COUNT"
+        then
+            printDetails
+            return 1
+        fi
+
+        PARAMS_PACKETS_COUNT_NAME="$PARAMS_PARSED_NAME"
+        PARAMS_PACKETS_COUNT_ARGS=("${PARAMS_PARSED_ARGS[@]}")
+
+        for PARAMS_SCENARIO in "${COMMON_PARAMS_SCENARIOS[@]}"
+        do
+            local PARAMS_SCENARIO_NAME=""
+            local PARAMS_SCENARIO_ARGS=()
+
+            if ! paramsParse "$PARAMS_SCENARIO"
+            then
+                printDetails
+                return 1
+            fi
+
+            PARAMS_SCENARIO_NAME="$PARAMS_PARSED_NAME"
+            PARAMS_SCENARIO_ARGS=("${PARAMS_PARSED_ARGS[@]}")
+
+            local TEST_ARGS=()
+
+            TEST_ARGS+=("${TEST_ARGS_DEFAULT[@]}")
+            TEST_ARGS+=("${PARAMS_PACKETS_COUNT_ARGS[@]}")
+            TEST_ARGS+=("${PARAMS_SCENARIO_ARGS[@]}")
+
+            if ! makeTest "${PARAMS_PACKETS_COUNT_NAME}_${PARAMS_SCENARIO_NAME}" "${TEST_ARGS[@]}"
+            then
+                printDetails
+                return 1
+            fi
+        done
+    done
+
+    return 0
+}
+
+# @brief    Функция подготовки рабочего окружения
+# @details  Данная функция выполняет инициализацию лог-файла, 
+#               удаление существующей тестовой среды и 
+#               создание пустой директории COMMON_TESTS_DIR
+# @return   Возвращает 0 в случае успешной подготовки рабочего окружения.
+#               В противном случае, возвращет 1
+function prepare()
+{
+    if ! truncate -s 0 "$COMMON_LOG"
+    then
+        echo "Failed to truncate $COMMON_LOG!"
+        return 1
+    fi
+
+    if [ -d "$COMMON_TESTS_DIR" ]
+    then
+        echo -n "Clearing existing test environment... "
+        rm -rf "$COMMON_TESTS_DIR" >> "$COMMON_LOG" 2>&1
+        echo "Done"
+    fi
+
+    if ! mkdir -p "$COMMON_TESTS_DIR" >> "$COMMON_LOG" 2>&1
+    then
+        echo "Failed to create $COMMON_TESTS_DIR"
+        printDetails
+        return 1
+    fi
+
+    return 0
+}
+
+# @brief    Функция вывода сообщения с командой для получения деталей об ошибке
+function printDetails()
+{
+    echo -e "Details:\n\tcat $COMMON_LOG"
+}
+
+# @brief    Полученное при помощи функции paramsParse() название
+PARAMS_PARSED_NAME=""
+
+# @brief    Полученные при помощи функции paramsParse() аргументы COMMON_TEST_DATA_GENERATOR
+PARAMS_PARSED_ARGS=()
+
+# @brief    Функция парсинга строки параметров
+# @details  Даная функция выполняет разбиение строки PARAMS на элементы,
+#               Первый элемент записывается в PARAMS_PARSED_NAME.
+#               Далее, из каждых 4-х элементов формируется аргумент для COMMON_TEST_DATA_GENERATOR
+#               и его значение.
+#               Все сформированные пары записываюся в PARAMS_PARSED_ARGS
+# @param    PARAMS Строка с параметрами
+# @return   Возвращает 0 в случае успешного выполнения операции.
+#               В противном случае, возвращает 1
+function paramsParse()
+{
+    local PARAMS="$1"
+
+    PARAMS_PARSED_NAME=""
+    PARAMS_PARSED_ARGS=()
+
+    if [ -z "$PARAMS" ]
+    then
+        echo "Params are empty" >> "$COMMON_LOG"
+        return 1
+    fi
+
+    local NAME=""
+    local ARGS=()
+    local PARAMS_PARSED=""
+
+    read -ra PARAMS_PARSED <<< "$PARAMS"
+
+    NAME="${PARAMS_PARSED[0]}"
+
+    if (((( ${#PARAMS_PARSED[@]} - 1 )) % 4 != 0))
+    then
+        echo "Params of $NAME are invalid" >> "$COMMON_LOG"
+        return 1
+    fi
+
+    local i=0
+    for ((i = 1; i < ${#PARAMS_PARSED[@]}; i += 4))
+    do
+        local OPTION="${PARAMS_PARSED[i]}"
+        local VALUE_GET_FUNCTION="${PARAMS_PARSED[i + 1]}"
+        local VALUE_MIN="${PARAMS_PARSED[i + 2]}"
+        local VALUE_MAX="${PARAMS_PARSED[i + 3]}"
+        local VALUE=$($VALUE_GET_FUNCTION "$VALUE_MIN" "$VALUE_MAX")
+
+        if [ -z "$OPTION"             ] ||
+           [ -z "$VALUE_GET_FUNCTION" ] ||
+           [ -z "$VALUE_MIN"          ] ||
+           [ -z "$VALUE_MAX"          ] ||
+           [ -z "$VALUE"              ]
+        then
+            {
+                echo "Params of $NAME are invalid:"
+                echo "OPTION             == $OPTION"
+                echo "VALUE_GET_FUNCTION == $VALUE_GET_FUNCTION"
+                echo "VALUE_MIN          == $VALUE_MIN"
+                echo "VALUE_MAX          == $VALUE_MAX"
+                echo "VALUE              == $VALUE"
+            } >> "$COMMON_LOG"
+            return 1
+        fi
+
+        ARGS+=("-$OPTION")
+        ARGS+=("$VALUE")
+    done
+
+    PARAMS_PARSED_NAME="$NAME"
+    PARAMS_PARSED_ARGS=("${ARGS[@]}")
+
+    return 0
+}
+
+# @brief    Функция создания теста
+# @details  Данная функция выполняет создание теста TEST при помощи COMMON_TEST_DATA_GENERATOR с аргументами ARGS
+# @warning  Функция подставляет после ARGS аргументы -tp -ip -op
+# @param    TEST_NAME Название теста
+# @param    ARGS      Аргументы COMMON_TEST_DATA_GENERATOR для создания теста
+# @return   Возвращает 0 в случае успешного создания теста.
+#               В противном случае, возвращает 1
+function makeTest()
+{
+    if [ -z "$1" ]
+    then
+        return 1
+    fi
+
+    local TEST_NAME="$1"
+    shift
+    local ARGS=("$@")
+    local TEST_DIR="$COMMON_TESTS_DIR/$TEST_NAME"
+
+    ARGS+=(-tp "$TEST_DIR/$COMMON_TEST_TEMP_FILE_NAME")
+    ARGS+=(-ip "$TEST_DIR/$COMMON_TEST_INPUT_FILE_NAME")
+    ARGS+=(-op "$TEST_DIR/$COMMON_TEST_OUTPUT_FILE_NAME")
+
+    echo -n "Creating test $TEST_NAME... " | tee -a "$COMMON_LOG"
+
+    {
+        echo
+        echo "Command:"
+        printf '%q ' "$COMMON_TEST_DATA_GENERATOR" "${ARGS[@]}"
+    } >> "$COMMON_LOG"
+
+    if ! mkdir "$TEST_DIR" >> "$COMMON_LOG" 2>&1
+    then
+        echo "Failed to create $TEST_DIR directory" | tee -a "$COMMON_LOG"
+        return 1
+    fi
+
+    if ! $COMMON_TEST_DATA_GENERATOR "${ARGS[@]}"
+    then
+        echo "Failed to create test $TEST_NAME" | tee -a "$COMMON_LOG"
+        return 1
+    fi
+
+    echo "Done" | tee -a "$COMMON_LOG"
+
+    return 0
+}
+
+# @brief    Функция генерации случайного значения в указанном диапазоне
+# @details  Данная функция выполняет генерацию случайного значения в диапазоне [MIN:MAX],
+#               выводя его в stdout
+# @param    MIN Минимальное значение
+# @param    MAX Максимальное значение
+# @return   Возвращает 0 в случае успешного выполнения операции.
+#               случайное нечетное значение в указанном диапазоне
+function randomRange()
+{
+    local MIN=$1
+    local MAX=$2
+
+    if [ -z "$MIN" ]
+    then
+        echo "Value generation error. MIN is empty" >> "$COMMON_LOG"
+        return 1
+    fi
+
+    if [ -z "$MAX" ]
+    then
+        echo "Value generation error. MAX is empty" >> "$COMMON_LOG"
+        return 1
+    fi
+
+    echo $((RANDOM % (MAX - MIN + 1) + MIN))
+
+    return 0
+}
+
+# @brief    Функция генерации случайного четного значения в указанном диапазоне
+# @details  Данная функция выполняет генерацию случайного четного значения в диапазоне [MIN:MAX],
+#               выводя его в stdout
+# @param    MIN Минимальное значение
+# @note     Если MIN нечетный, он будет инкрементирован на 1
+# @param    MAX Максимальное значение
+# @note     Если MAX нечетный, он будет декрементирован на 1
+# @return   Возвращает 0 в случае успешного выполнения операции.
+#               случайное нечетное значение в указанном диапазоне
+function randomEven()
+{
+    local MIN=$1
+    local MAX=$2
+
+    if [ -z "$MIN" ]
+    then
+        echo "Even value generation error. MIN is empty" >> "$COMMON_LOG"
+        return 1
+    fi
+
+    if [ -z "$MAX" ]
+    then
+        echo "Even value generation error. MAX is empty" >> "$COMMON_LOG"
+        return 1
+    fi
+
+    ((MIN % 2 == 1)) && ((MIN++))
+    ((MAX % 2 == 1)) && ((MAX--))
+
+    if ((MIN > MAX))
+    then
+        echo "Even value generation error [$1:$2]" >> "$COMMON_LOG"
+        return 1
+    fi
+
+    echo $(((RANDOM % (((MAX - MIN) / 2) + 1)) * 2 + MIN))
+
+    return 0
+}
+
+# @brief    Функция генерации случайного нечетного значения в указанном диапазоне
+# @details  Данная функция выполняет генерацию случайного нечетного значения в диапазоне [MIN:MAX],
+#               выводя его в stdout
+# @param    MIN Минимальное значение
+# @note     Если MIN четный, он будет инкрементирован на 1
+# @param    MAX Максимальное значение
+# @note     Если MAX четный, он будет декрементирован на 1
+# @return   Возвращает 0 в случае успешного выполнения операции.
+#               случайное нечетное значение в указанном диапазоне
+function randomOdd()
+{
+    local MIN=$1
+    local MAX=$2
+
+    if [ -z "$MIN" ]
+    then
+        echo "Odd value generation error. MIN is empty" >> "$COMMON_LOG"
+        return 1
+    fi
+
+    if [ -z "$MAX" ]
+    then
+        echo "Odd value generation error. MAX is empty" >> "$COMMON_LOG"
+        return 1
+    fi
+
+    ((MIN % 2 == 0)) && ((MIN++))
+    ((MAX % 2 == 0)) && ((MAX--))
+
+    if ((MIN > MAX))
+    then
+        echo "Odd value generation error [$1:$2]" >> "$COMMON_LOG"
+        return 1
+    fi
+
+    echo $(((RANDOM % (((MAX - MIN) / 2) + 1)) * 2 + MIN))
+
+    return 0 
+}
+
+#
+# Точка входа в скрипт
+#
+
+main
+exit $?
