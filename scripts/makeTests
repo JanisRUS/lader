@@ -316,7 +316,7 @@ function performCompareTest()
         return 1
     fi
 
-    "$COMMON_UTILITY" -o "$TEST_OUTPUT_FILE" "$TEST_INPUT_FILE" >> "$COMMON_LOG" 2>&1
+    "$COMMON_UTILITY" -o "$UTILITY_OUTPUT_FILE" "$TEST_INPUT_FILE" >> "$COMMON_LOG" 2>&1
 
     if ! diff "$TEST_OUTPUT_FILE" "$UTILITY_OUTPUT_FILE" >> /dev/null 2>&1
     then

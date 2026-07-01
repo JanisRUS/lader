@@ -796,20 +796,14 @@ function outputFileEncodeTempFile()
         return value
     }
 
-    BEGIN {
-        bitCount = 0
-        byte     = 0
-    }
-
+    function processLine(line, i, bit)
     {
-        for (i = 1; i <= length($0); ++i)
+        for (i = 1; i <= length(line); ++i)
         {
-            bit = substr($0, i, 1)
+            bit = substr(line, i, 1)
 
             if (bit != "0" && bit != "1")
-            {
                 continue
-            }
 
             byte = shiftLeft(byte, 1) + bit
             ++bitCount
@@ -817,20 +811,37 @@ function outputFileEncodeTempFile()
             if (bitCount == 8)
             {
                 write(byte)
-
                 byte     = 0
                 bitCount = 0
             }
         }
-    }
 
-    END {
         if (bitCount > 0)
         {
             byte = shiftLeft(byte, 8 - bitCount)
             write(byte)
+            byte     = 0
+            bitCount = 0
         }
     }
+
+    BEGIN {
+        byte      = 0
+        bitCount  = 0
+        isNotEOF  = 0
+        lastLine  = 0
+    }
+
+    {
+        if (isNotEOF)
+        {
+            processLine(lastLine)
+        }
+
+        lastLine = $0
+        isNotEOF = 1
+    }
+
     ' "$TEMP_FILE_PATH" >&3
 
     exec 3>&-

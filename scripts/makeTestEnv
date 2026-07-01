@@ -16,6 +16,9 @@ readonly COMMON_SCRIPT_NAME="$(basename "$0")"
 # @brief    Лог-файл
 readonly COMMON_LOG="/tmp/$COMMON_SCRIPT_NAME.log"
 
+# @brief    Файл с информацией о созданных тестах
+readonly COMMON_TESTS_INFO="$COMMON_SCRIPT_DIR/../tests.info"
+
 # @brief    Директория с тестовым окружением
 readonly COMMON_TESTS_DIR="$COMMON_SCRIPT_DIR/../tests"
 
@@ -183,9 +186,9 @@ function main()
 
             local TEST_ARGS=()
 
-            TEST_ARGS+=("${TEST_ARGS_DEFAULT[@]}")
-            TEST_ARGS+=("${PARAMS_PACKETS_COUNT_ARGS[@]}")
-            TEST_ARGS+=("${PARAMS_SCENARIO_ARGS[@]}")
+            argsMerge TEST_ARGS "${TEST_ARGS_DEFAULT[@]}"
+            argsMerge TEST_ARGS "${PARAMS_PACKETS_COUNT_ARGS[@]}"
+            argsMerge TEST_ARGS "${PARAMS_SCENARIO_ARGS[@]}"
 
             if ! makeTest "${PARAMS_PACKETS_COUNT_NAME}_${PARAMS_SCENARIO_NAME}" "${TEST_ARGS[@]}"
             then
@@ -209,6 +212,12 @@ function prepare()
     if ! truncate -s 0 "$COMMON_LOG"
     then
         echo "Failed to truncate $COMMON_LOG!"
+        return 1
+    fi
+
+    if ! truncate -s 0 "$COMMON_TESTS_INFO"
+    then
+        echo "Failed to truncate $COMMON_TESTS_INFO!"
         return 1
     fi
 
@@ -313,6 +322,49 @@ function paramsParse()
     return 0
 }
 
+# @brief    Функция слияния списка аргуметов
+# @details  Данная функция выполняет слияние аргументов из SRC в DEST.
+#               Если аргумент из SRC отсуствует в DEST, он будет туда дописан.
+#               Если аргумент из SRC присуствует в DEST, его значение заменит собой зачение в DEST.
+# @param    DEST Ссылка на список аргументов, куда необходимо слить SRC
+# @param    SRC  Список аргументов, который надо слить в DEST
+# @return   Возвращает 0 в случае успешного слияния аргументов.
+#               В противном случае, возвращает 1
+function argsMerge()
+{
+    (($# >= 1)) || return 1
+
+    local -n DEST="$1"
+    shift
+    local SRC=("$@")
+
+    ((${#DEST[@]} % 2 != 0)) && return 1
+    ((${#SRC[@]}  % 2 != 0)) && return 1
+
+    local i=0
+    local j=0
+
+    for ((i = 0; i < ${#SRC[@]}; i += 2))
+    do
+        local IS_FOUND=0
+
+        for ((j = 0; j < ${#DEST[@]}; j += 2))
+        do
+            if [[ "${DEST[j]}" == "${SRC[i]}" ]]
+            then
+                DEST[j + 1]="${SRC[i + 1]}"
+                IS_FOUND=1
+                break
+            fi
+        done
+
+        if ((IS_FOUND == 0))
+        then
+            DEST+=("${SRC[i]}" "${SRC[i + 1]}")
+        fi
+    done
+}
+
 # @brief    Функция создания теста
 # @details  Данная функция выполняет создание теста TEST при помощи COMMON_TEST_DATA_GENERATOR с аргументами ARGS
 # @warning  Функция подставляет после ARGS аргументы -tp -ip -op
@@ -331,18 +383,16 @@ function makeTest()
     shift
     local ARGS=("$@")
     local TEST_DIR="$COMMON_TESTS_DIR/$TEST_NAME"
+    
+    echo "$TEST_NAME ${ARGS[@]}" >> "$COMMON_TESTS_INFO"
 
     ARGS+=(-tp "$TEST_DIR/$COMMON_TEST_TEMP_FILE_NAME")
     ARGS+=(-ip "$TEST_DIR/$COMMON_TEST_INPUT_FILE_NAME")
     ARGS+=(-op "$TEST_DIR/$COMMON_TEST_OUTPUT_FILE_NAME")
 
     echo -n "Creating test $TEST_NAME... " | tee -a "$COMMON_LOG"
-
-    {
-        echo
-        echo "Command:"
-        printf '%q ' "$COMMON_TEST_DATA_GENERATOR" "${ARGS[@]}"
-    } >> "$COMMON_LOG"
+    
+    echo -e "\nCommand: $COMMON_TEST_DATA_GENERATOR ${ARGS[@]}" >> "$COMMON_LOG"
 
     if ! mkdir "$TEST_DIR" >> "$COMMON_LOG" 2>&1
     then
