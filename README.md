@@ -129,7 +129,7 @@ lader -o "outputFile.bin" "logic-analyzer-data-file.bin"
 
 # TODO
 
-- Доделать скрипт makeTestEnv
+- Оптимизировать скрипт для генерации входного и выходного файлов
 
 - Протестировать утилиту
 
