@@ -21,7 +21,7 @@ static const char *PROGRAMM_NAME = "lader";
 
 /// @brief      Версия ПО
 /// @warning    Должна соответствовать актуальной версии из файла debian/changelog
-static const char *PROGRAMM_VERSION = "0.1.0";
+static const char *PROGRAMM_VERSION = "0.2.0";
 
 /// @brief      Суффикс выходного файла
 static const char *OUTPUT_FILE_SUFFIX = "-parsed";
