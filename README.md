@@ -170,8 +170,4 @@ lader -o "outputFile.bin" "logic-analyzer-data-file.bin"
 
 # TODO
 
-- Протестировать утилиту
-
-- Исправить выявленные баги
-
 - Сделать релиз версии 1.0.0
