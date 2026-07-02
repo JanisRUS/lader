@@ -163,7 +163,8 @@ int main(int argc, char *argv[])
 
     if (!fileOutput)
     {
-        const char *dotPtr = 0;
+        const char *dotPtr    = 0;
+        const char *lastSlash = 0;
 
         fileOutput = (char *)malloc(strlen(fileInput) + strlen(OUTPUT_FILE_SUFFIX) + 1);
         if (!fileOutput)
@@ -173,7 +174,17 @@ int main(int argc, char *argv[])
             goto cleanup;
         }
 
-        dotPtr = strrchr(fileInput, '.');
+        lastSlash = strrchr(fileInput, '/');
+
+        if (lastSlash)
+        {
+            dotPtr = strrchr(lastSlash, '.');
+        }
+        else
+        {
+            dotPtr = strrchr(fileInput, '.');
+        }
+
         if (dotPtr)
         {
             size_t fileNameBaseLength = dotPtr - fileInput;
