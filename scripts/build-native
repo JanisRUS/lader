@@ -53,7 +53,7 @@ COMMON_OUTPUT_DIR="$COMMON_SCRIPT_DIR/../output"
 
 # @brief    Главная функция
 # @details  Данная функция выполняет вызов prepare(), парсинг и проверку входных аргументов.
-#               Затем выполняет вызов dpkg-buildpackage,
+#           Затем выполняет вызов dpkg-buildpackage,
 #               копирование выходных файлов в COMMON_OUTPUT_DIR и вызов debclean
 # @return   Возвращает ALL_OK в случае успешного выполнения всех действий.
 #               В противном случае, возвращает NOT_OK

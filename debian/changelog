@@ -1,3 +1,27 @@
+lader (1.0.0) stable; urgency=medium
+
+  * The first stable released version
+  * The utility performs parsing of logic analyzer data, 
+    writing the result to an output file, 
+    and outputs the length of data packets if it is the same for all packets. 
+    To get help with the utility, use --help
+
+ -- JanisRUS <janisrus35@gmail.com>  Tue, 2 Jul 2026 21:57:26 +0300
+
+lader (0.2.0) testing; urgency=medium
+
+  * The algorithm for creating the path to the output file has been changed.
+    Now the path to the output file is similar to the path of the input file, 
+    unless the path to it is explicitly specified with the -o argument.
+
+ -- JanisRUS <janisrus35@gmail.com>  Mon, 2 Jul 2026 21:53:47 +0300
+
+lader (0.1.0) testing; urgency=medium
+
+  * The basic functionality of the project has been implemented
+
+ -- JanisRUS <janisrus35@gmail.com>  Wed, 1 Jul 2026 1:48:15 +0300
+
 lader (0.0.1) testing; urgency=medium
 
   * Project template created
