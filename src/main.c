@@ -163,13 +163,9 @@ int main(int argc, char *argv[])
 
     if (!fileOutput)
     {
-        const char *fileNamePtr = 0;
-        const char *dotPtr      = 0;
+        const char *dotPtr = 0;
 
-        fileNamePtr = strrchr(fileInput, '/');
-        fileNamePtr = fileNamePtr ? fileNamePtr + 1 : fileInput;
-
-        fileOutput = (char *)malloc(strlen(fileNamePtr) + strlen(OUTPUT_FILE_SUFFIX) + 1);
+        fileOutput = (char *)malloc(strlen(fileInput) + strlen(OUTPUT_FILE_SUFFIX) + 1);
         if (!fileOutput)
         {
             fprintf(stderr, "%s: internal error\n", PROGRAMM_NAME);
@@ -177,12 +173,12 @@ int main(int argc, char *argv[])
             goto cleanup;
         }
 
-        dotPtr = strrchr(fileNamePtr, '.');
+        dotPtr = strrchr(fileInput, '.');
         if (dotPtr)
         {
-            size_t fileNameBaseLength = dotPtr - fileNamePtr;
+            size_t fileNameBaseLength = dotPtr - fileInput;
 
-            strncpy(fileOutput, fileNamePtr, fileNameBaseLength);
+            strncpy(fileOutput, fileInput, fileNameBaseLength);
             fileOutput[fileNameBaseLength] = '\0';
 
             strcat(fileOutput, OUTPUT_FILE_SUFFIX);
@@ -190,7 +186,7 @@ int main(int argc, char *argv[])
         }
         else
         {
-            strcpy(fileOutput, fileNamePtr);
+            strcpy(fileOutput, fileInput);
             strcat(fileOutput, OUTPUT_FILE_SUFFIX);
         }
     }
