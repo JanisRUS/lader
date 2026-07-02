@@ -169,5 +169,3 @@ lader -o "outputFile.bin" "logic-analyzer-data-file.bin"
 # BUGS
 
 # TODO
-
-- Сделать релиз версии 1.0.0
